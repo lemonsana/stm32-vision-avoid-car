@@ -24,3 +24,6 @@ Thumbs.db
 desktop.ini
 .vscode/
 .idea/
+
+# 本地分析产物（视频抽帧等）
+_analysis/

@@ -1,4 +1,4 @@
-﻿#include "IRSEARCH.h"
+#include "IRSEARCH.h"
 #include "delay.h"
 #include "motor.h"
 #include "cfg.h"
@@ -57,6 +57,10 @@ static u16     gray_cross_count  = 0;                  /* 上电以来宽黑次�
 
 /* ---- V6 速度斜坡状态（只作用在基础速度上） ---- */
 static int16_t gray_base_ramp = 0;
+
+/* 速度比例（视觉避障减速用）：100 = 原始速度，行为与旧版完全一致。
+ * 只乘在"调度后的基础速度"上，不改 PID 的 P/D 结构，也不改任何引脚/时序。 */
+static u8      gray_speed_scale = 100;
 
 /* ---- PID 状态 ---- */
 static int32_t gray_i_sum      = 0;       /* 积分累加，单位：误差·毫秒 */
@@ -362,6 +366,7 @@ void IRSearchInit(void)
     gray_base_speed   = 0;
     gray_i_sum        = 0;
     gray_prev_error   = 0;
+    gray_speed_scale  = 100;
 
     gray_iface_init();
     delay_ms(50);                   /* 等模块上电稳定 */
@@ -370,6 +375,14 @@ void IRSearchInit(void)
     if (!gray_iface_config()) return;
 
     gray_ready = 1;
+}
+
+/* 基础速度比例控制（0~100）。视觉避障的"平稳减速"用它：
+ * 循迹 PID、增益调度、差速分配全部照旧，只是把基础速度整体收一档。
+ * pct >= 100 一律按 100 处理，所以旧代码不调用它时行为零变化。 */
+void Gray_SetSpeedScale(u8 pct)
+{
+    gray_speed_scale = (pct > 100u) ? 100u : pct;
 }
 
 /* 读一次 8 路，算出：位置误差 + 覆盖度（几路压线）
@@ -602,6 +615,10 @@ void SearchRun(void)
 
             base_speed = Cfg_Get(CFG_BASE);
             if (base_speed < Cfg_Get(CFG_MIN_SPEED)) base_speed = Cfg_Get(CFG_MIN_SPEED);
+            if (gray_speed_scale < 100u)
+            {
+                base_speed = (int16_t)(((int32_t)base_speed * gray_speed_scale) / 100);
+            }
 
             gray_base_ramp  = gray_ramp_step(gray_base_ramp, base_speed);
             gray_base_speed = gray_base_ramp;
@@ -642,6 +659,12 @@ void SearchRun(void)
                          - (abs_e  * Cfg_Get(CFG_SLOW))   / 100
                          - (abs_de * Cfg_Get(CFG_SLOW_D)) / 100);
     if (base_speed < Cfg_Get(CFG_MIN_SPEED)) base_speed = Cfg_Get(CFG_MIN_SPEED);
+
+    /* 视觉避障减速：只缩基础速度，PID 结构不变（斜坡在下面，所以不会突变） */
+    if (gray_speed_scale < 100u)
+    {
+        base_speed = (int16_t)(((int32_t)base_speed * gray_speed_scale) / 100);
+    }
 
     /* 增益调度：小误差用 GAIN，大误差用 FAR，中间线性过渡 */
     if (abs_e >= Cfg_Get(CFG_FAR_THD))
