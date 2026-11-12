@@ -1,4 +1,4 @@
-#ifndef __IRSEARCH_H_
+﻿#ifndef __IRSEARCH_H_
 #define __IRSEARCH_H_
 
 #include "stm32f10x.h"

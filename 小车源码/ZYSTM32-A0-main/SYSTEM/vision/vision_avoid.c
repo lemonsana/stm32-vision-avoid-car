@@ -270,6 +270,10 @@ void VisionAvoid_Start(void)
     Gray_SetSpeedScale(100);
     Motor_Stop();
     Gray_ResetIntegral();
+
+#if DEBUG_UART
+    printf("[vision] start %s\r\n", VA_VERSION_STR);
+#endif
 }
 
 void VisionAvoid_Stop(void)
